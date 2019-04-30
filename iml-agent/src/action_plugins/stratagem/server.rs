@@ -155,8 +155,11 @@ pub fn trigger_scan(
         .from_err()
         .and_then(write_tempfile)
         .and_then(move |f| {
-            cmd_output_success("lipe_scan", &["-c", &f.path().to_str().unwrap(), "-W", &id])
-                .map(|x| (x, f))
+            cmd_output_success(
+                "/usr/bin/lipe_scan",
+                &["-c", &f.path().to_str().unwrap(), "-W", &format!("/tmp/{}", id)],
+            )
+            .map(|x| (x, f))
         })
         .map(|(output, _f)| String::from_utf8_lossy(&output.stdout).into_owned())
         .and_then(move |_| read_file_to_end(format!("/tmp/{}/result.json", id2)))
