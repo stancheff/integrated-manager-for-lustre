@@ -2,18 +2,14 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-use crate::{
-    agent_error::ImlAgentError,
-    env,
-    http_comms::crypto_client};
+use crate::{agent_error::ImlAgentError, env, http_comms::crypto_client};
 use csv;
-use futures::stream::Stream;
 use futures::future::Future;
+use futures::stream::Stream;
 use libc;
 use std::ffi::CStr;
 use std::io;
 use std::sync::mpsc::channel;
-use rayon::prelude::*;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
@@ -89,11 +85,7 @@ pub fn write_records(
     Ok(())
 }
 
-pub fn read_mailbox(
-    device: &str,
-    mailbox: &str,
-    out: impl io::Write,
-) -> Result<(), ImlAgentError> {
+pub fn read_mailbox(device: &str, mailbox: &str, out: impl io::Write) -> Result<(), ImlAgentError> {
     let mntpt = liblustreapi::search_rootpath(&device).map_err(|e| {
         log::error!("Failed to find rootpath({}) -> {:?}", device, e);
         e
@@ -110,15 +102,17 @@ pub fn read_mailbox(
     // Spawn off an expensive computation
     tokio::spawn(
         stream_lines::strings(crypto_client::get_stream(&client, message_endpoint, &query))
+            // @@ add multithreading here
             .for_each(move |fid| {
                 if let Ok(rec) = fid2record(&mntpt, &fid) {
-                    sender.send(rec).map_err(|_| { ImlAgentError::SendError })?;
+                    sender.send(rec).map_err(|_| ImlAgentError::SendError)?;
                 }
                 Ok(())
-            }).map_err(|e| {
+            })
+            .map_err(|e| {
                 log::error!("Failed {:?}", e);
                 ()
-            })
+            }),
     );
 
     loop {
@@ -127,7 +121,7 @@ pub fn read_mailbox(
                 if let Err(err) = wtr.serialize(&rec) {
                     log::error!("Failed to write record for fid {}: {}", rec.fid, err);
                 }
-            },
+            }
             Err(_) => break,
         }
     }
